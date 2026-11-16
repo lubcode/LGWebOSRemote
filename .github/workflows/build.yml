@@ -1,0 +1,59 @@
+name: Build LG WebOS Remote APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'LGWebOSRemote-source.zip'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Get project ZIP
+        uses: actions/checkout@v4
+
+      - name: Unpack Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f LGWebOSRemote-source.zip
+          unzip -q LGWebOSRemote-source.zip -d extracted
+          test -f extracted/LGWebOSRemote/settings.gradle
+          test -f extracted/LGWebOSRemote/app/build.gradle
+
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        shell: bash
+        run: |
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Install Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          gradle --no-daemon --stacktrace -p extracted/LGWebOSRemote :app:assembleDebug
+
+      - name: Publish APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LGWebOSRemote-debug-apk
+          path: extracted/LGWebOSRemote/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
