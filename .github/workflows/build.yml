@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -31,13 +31,35 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android platform
+      # GitHub-hosted Ubuntu runners already have Android SDK installed.
+      # Avoid android-actions/setup-android, which failed during sdkmanager setup.
+      - name: Check Android SDK
         shell: bash
         run: |
-          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -d "$SDK"
+          echo "SDK=$SDK" >> "$GITHUB_ENV"
+          ls -la "$SDK/platforms" || true
+          ls -la "$SDK/build-tools" || true
+
+      - name: Ensure Android 35 tools are available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d "$SDK/platforms/android-35" ] || [ ! -d "$SDK/build-tools/35.0.0" ]; then
+            SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+            if [ ! -x "$SDKMANAGER" ]; then
+              SDKMANAGER="$(find "$SDK/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+            fi
+            test -x "$SDKMANAGER"
+            yes | "$SDKMANAGER" --licenses > /dev/null || true
+            "$SDKMANAGER" --sdk_root="$SDK" 'platforms;android-35' 'build-tools;35.0.0'
+          fi
+          test -d "$SDK/platforms/android-35"
+          test -d "$SDK/build-tools/35.0.0"
 
       - name: Install Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
